@@ -34,53 +34,106 @@ resource "azurerm_public_ip" "meu_PIP" {
   }
 }
 
-resource "azurerm_network_interface" "interface" {
-  name                = "test-nic"
+resource "azurerm_lb" "meu_loadbalance" {
+  name                = "test"
   location            = azurerm_resource_group.meu_grupo_de_recursos.location
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
 
-  ip_configuration {
-    name                          = "configuration1"
-    subnet_id                     = azurerm_subnet.subnet_interna.id
-    private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.meu_PIP.id
+  frontend_ip_configuration {
+    name                 = "PublicIPAddress"
+    public_ip_address_id = azurerm_public_ip.meu_PIP.id
   }
 }
 
-resource "azurerm_linux_virtual_machine_scale_set" "minha_maquina_virtual" {
+resource "azurerm_lb_backend_address_pool" "bpepool" {
+  resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
+  loadbalancer_id     = azurerm_lb.meu_loadbalance.id
+  name                = "BackEndAddressPool"
+}
+
+resource "azurerm_lb_nat_pool" "lbnatpool" {
+  resource_group_name            = azurerm_resource_group.meu_grupo_de_recursos.name
+  name                           = "ssh"
+  loadbalancer_id                = azurerm_lb.meu_loadbalance.id
+  protocol                       = "Tcp"
+  frontend_port_start            = 50000
+  frontend_port_end              = 50119
+  backend_port                   = 22
+  frontend_ip_configuration_name = "PublicIPAddress"
+}
+
+resource "azurerm_lb_probe" "meu_http_probe" {
+  resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
+  loadbalancer_id     = azurerm_lb.meu_loadbalance.id
+  name                = "meu_http_probe"
+  protocol            = "Http"
+  request_path        = "/health"
+  port                = 80
+}
+
+resource "azurerm_virtual_machine_scale_set" "minha_maquina_virtual" {
   name                = "MinhaMaquinaVirtual"
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
   location            = azurerm_resource_group.meu_grupo_de_recursos.location
-  sku                 = "Standard_F2"
-  instances           = 1
-  admin_username      = "adminuser"
+  
+  upgrade_policy_mode  = "Manual"
 
-  admin_ssh_key {
-    username   = "adminuser"
-    public_key = file("~/.ssh/id_rsa.pub")
+  sku {
+    name     = "Standard_F2"
+    tier     = "Standard"
+    capacity = 2
   }
 
-  source_image_reference {
+  storage_profile_image_reference {
     publisher = "Canonical"
     offer     = "UbuntuServer"
     sku       = "16.04-LTS"
     version   = "latest"
   }
 
-  os_disk {
-    storage_account_type = "Standard_LRS"
-    caching              = "ReadWrite"
+  storage_profile_os_disk {
+    name              = ""
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Standard_LRS"
   }
 
-  network_interface {
-    name    = "interface_rede"
+  storage_profile_data_disk {
+    lun           = 0
+    caching       = "ReadWrite"
+    create_option = "Empty"
+    disk_size_gb  = 10
+  }
+
+  os_profile {
+    computer_name_prefix = "testvm"
+    admin_username       = "wordpressuser"
+  }
+
+  os_profile_linux_config {
+    disable_password_authentication = true
+
+    ssh_keys {
+      path     = "/home/wordpressuser/.ssh/authorized_keys"
+      key_data = file("~/.ssh/id_rsa.pub")
+    }
+  }
+
+  network_profile {
+    name    = "terraformnetworkprofile"
     primary = true
 
     ip_configuration {
-      name      = "interna"
-      primary   = true
-      subnet_id = azurerm_subnet.subnet_interna.id
+      name                                   = "TestIPConfiguration"
+      primary                                = true
+      subnet_id                              = azurerm_subnet.subnet_interna.id
+      load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.bpepool.id]
+      load_balancer_inbound_nat_rules_ids    = [azurerm_lb_nat_pool.lbnatpool.id]
     }
+  }
+
+  tags = {
+    environment = "Dev"
   }
 }
 
