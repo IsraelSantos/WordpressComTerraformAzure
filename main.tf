@@ -46,8 +46,8 @@ resource "azurerm_public_ip" "mysql_PIP" {
   }
 }
 
-resource "azurerm_lb" "meu_loadbalance" {
-  name                = "test"
+resource "azurerm_lb" "wordpress_loadbalance" {
+  name                = "wordpress-loadbalance"
   location            = azurerm_resource_group.meu_grupo_de_recursos.location
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
 
@@ -59,14 +59,14 @@ resource "azurerm_lb" "meu_loadbalance" {
 
 resource "azurerm_lb_backend_address_pool" "bpepool" {
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
-  loadbalancer_id     = azurerm_lb.meu_loadbalance.id
+  loadbalancer_id     = azurerm_lb.wordpress_loadbalance.id
   name                = "BackEndAddressPool"
 }
 
 resource "azurerm_lb_nat_pool" "lbnatpool" {
   resource_group_name            = azurerm_resource_group.meu_grupo_de_recursos.name
   name                           = "ssh"
-  loadbalancer_id                = azurerm_lb.meu_loadbalance.id
+  loadbalancer_id                = azurerm_lb.wordpress_loadbalance.id
   protocol                       = "Tcp"
   frontend_port_start            = 50000
   frontend_port_end              = 50119
@@ -76,7 +76,7 @@ resource "azurerm_lb_nat_pool" "lbnatpool" {
 
 resource "azurerm_lb_probe" "meu_http_probe" {
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
-  loadbalancer_id     = azurerm_lb.meu_loadbalance.id
+  loadbalancer_id     = azurerm_lb.wordpress_loadbalance.id
   name                = "meu_http_probe"
   protocol            = "Http"
   request_path        = "/health"
@@ -84,7 +84,7 @@ resource "azurerm_lb_probe" "meu_http_probe" {
 }
 
 resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress" {
-  name                = "MeuConjuntoDeMaquinasWordpress"
+  name                = "meu-conjunto-de-maquinas-wordpress"
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
   location            = azurerm_resource_group.meu_grupo_de_recursos.location
   
@@ -118,7 +118,7 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
   }
 
   os_profile {
-    computer_name_prefix = "testvm"
+    computer_name_prefix = "wordpressvm"
     admin_username       = "wordpressuser"
   }
 
@@ -136,7 +136,7 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
     primary = true
 
     ip_configuration {
-      name                                   = "TestIPConfiguration"
+      name                                   = "IPConfiguration"
       primary                                = true
       subnet_id                              = azurerm_subnet.subnet_interna.id
       load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.bpepool.id]
@@ -146,6 +146,71 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
 
   tags = {
     environment = "Dev"
+  }
+}
+
+resource "azurerm_monitor_autoscale_setting" "monitor" {
+  name                = "minha-conf-autoscaling"
+  resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
+  location            = azurerm_resource_group.meu_grupo_de_recursos.location
+  target_resource_id  = azurerm_virtual_machine_scale_set.meu_conjunto_de_maquinas_wordpress.id
+
+  profile {
+    name = "defaultProfile"
+
+    capacity {
+      default = 1
+      minimum = 1
+      maximum = 2
+    }
+
+    rule {
+      metric_trigger {
+        metric_name        = "Percentage CPU"
+        metric_resource_id = azurerm_virtual_machine_scale_set.meu_conjunto_de_maquinas_wordpress.id
+        time_grain         = "PT1M"
+        statistic          = "Average"
+        time_window        = "PT5M"
+        time_aggregation   = "Average"
+        operator           = "GreaterThan"
+        threshold          = 50
+      }
+
+      scale_action {
+        direction = "Increase"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT1M"
+      }
+    }
+
+    rule {
+      metric_trigger {
+        metric_name        = "Percentage CPU"
+        metric_resource_id = azurerm_virtual_machine_scale_set.meu_conjunto_de_maquinas_wordpress.id
+        time_grain         = "PT1M"
+        statistic          = "Average"
+        time_window        = "PT5M"
+        time_aggregation   = "Average"
+        operator           = "LessThan"
+        threshold          = 25
+      }
+
+      scale_action {
+        direction = "Decrease"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT1M"
+      }
+    }
+  }
+
+  notification {
+    email {
+      send_to_subscription_administrator    = true
+      send_to_subscription_co_administrator = true
+      custom_emails                         = ["israel.santos.cr@gmail.com"]
+    }
   }
 }
 
