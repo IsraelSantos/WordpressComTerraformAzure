@@ -149,6 +149,44 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
   }
 }
 
+resource "azurerm_network_security_group" "grupo_de_seguranca_wordpress" {
+  name                = "grupo-de-seguranca-wordpress"
+  location            = azurerm_resource_group.meu_grupo_de_recursos.location
+  resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
+
+# Criei esse acesso para poder visualizar a máquina do banco e poder utilizá-la para visualizar as demais máquinas
+  security_rule {
+    name                       = "MySQL"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "3306"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+    security_rule {
+    name                       = "SSH"
+    priority                   = 101
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+
+
+  tags = {
+    environment = "Dev"
+  }
+}
+
+
 resource "azurerm_network_interface" "interface_rede_mysql" {
   name                = "interface-rede-mysql"
   location            = azurerm_resource_group.meu_grupo_de_recursos.location
@@ -158,9 +196,14 @@ resource "azurerm_network_interface" "interface_rede_mysql" {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.subnet_interna.id
     public_ip_address_id          = azurerm_public_ip.mysql_PIP.id
-    private_ip_address_allocation = "Dynamic"
-#    private_ip_address            = "10.0.2.3"
+    private_ip_address_allocation = "Static"
+    private_ip_address            = cidrhost("10.0.2.4/24", 4)
   }
+}
+
+resource "azurerm_network_interface_security_group_association" "associacao" {
+  network_interface_id      = azurerm_network_interface.interface_rede_mysql.id
+  network_security_group_id = azurerm_network_security_group.grupo_de_seguranca_wordpress.id
 }
 
 resource "azurerm_linux_virtual_machine" "mysql_machine" {
@@ -195,6 +238,7 @@ resource "azurerm_linux_virtual_machine" "mysql_machine" {
 data "azurerm_public_ip" "meu_PIP" {
   name                = azurerm_public_ip.meu_PIP.name
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
+  depends_on          = [azurerm_virtual_machine_scale_set.meu_conjunto_de_maquinas_wordpress,]
 }
 
 output "public_ip_address" {
@@ -217,8 +261,8 @@ resource "null_resource" "para_uso" {
     # Para usar a chave é necessário descriptografá-la: openssl rsa -in id_rsa -out id_rsa.insecure
     inline = [
       "sudo apt-get update",
-      "sudo apt-get install docker.io",
-      "sudo docker run -p 3306:3306 --name wordpress-mysql --restart always -e MYSQL_ROOT_PASSWORD=jhjggy$#@ -e MYSQL_DATABASE=wordpress -e MYSQL_USER=usr-wordpress -e MYSQL_PASSWORD=jhjggy$#@ -d mysql:5.7",
+      "sudo apt-get --yes --force-yes install docker.io",
+      "sudo docker run -p 3306:3306 --name wordpress-mysql --restart always -e MYSQL_ROOT_PASSWORD=jhjggykjhd85d83h -e MYSQL_DATABASE=wordpress -e MYSQL_USER=usr-wordpress -e MYSQL_PASSWORD=jhjggykjhd85d83h -d mysql:5.7",
     ]
 
     connection {

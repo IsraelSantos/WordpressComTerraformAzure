@@ -1,1 +1,2 @@
+# https://medium.com/@joaoigm/primeiros-passos-com-terraform-no-azure-89ff33bec1c9
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine_scale_set
