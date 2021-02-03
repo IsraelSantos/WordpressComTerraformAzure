@@ -63,24 +63,23 @@ resource "azurerm_lb_backend_address_pool" "bpepool" {
   name                = "BackEndAddressPool"
 }
 
-resource "azurerm_lb_nat_pool" "lbnatpool" {
-  resource_group_name            = azurerm_resource_group.meu_grupo_de_recursos.name
-  name                           = "ssh"
-  loadbalancer_id                = azurerm_lb.wordpress_loadbalance.id
-  protocol                       = "Tcp"
-  frontend_port_start            = 50000
-  frontend_port_end              = 50119
-  backend_port                   = 22
-  frontend_ip_configuration_name = "PublicIPAddress"
-}
-
 resource "azurerm_lb_probe" "meu_http_probe" {
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
   loadbalancer_id     = azurerm_lb.wordpress_loadbalance.id
   name                = "meu_http_probe"
-  protocol            = "Http"
-  request_path        = "/health"
   port                = 80
+}
+
+resource "azurerm_lb_rule" "lbnatrule" {
+   resource_group_name            = azurerm_resource_group.meu_grupo_de_recursos.name
+   loadbalancer_id                = azurerm_lb.wordpress_loadbalance.id
+   name                           = "http"
+   protocol                       = "Tcp"
+   frontend_port                  = 80
+   backend_port                   = 80
+   backend_address_pool_id        = azurerm_lb_backend_address_pool.bpepool.id
+   frontend_ip_configuration_name = "PublicIPAddress"
+   probe_id                       = azurerm_lb_probe.meu_http_probe.id
 }
 
 resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress" {
@@ -120,6 +119,7 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
   os_profile {
     computer_name_prefix = "wordpressvm"
     admin_username       = "wordpressuser"
+    custom_data          = file("web.conf") # Arquivo yml que contém cloud-init das máquinas virtuais que serão instanciadas 
   }
 
   os_profile_linux_config {
@@ -140,7 +140,6 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
       primary                                = true
       subnet_id                              = azurerm_subnet.subnet_interna.id
       load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.bpepool.id]
-      load_balancer_inbound_nat_rules_ids    = [azurerm_lb_nat_pool.lbnatpool.id]
     }
   }
 
@@ -148,6 +147,17 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
     environment = "Dev"
   }
 }
+
+/*resource "azurerm_virtual_machine_scale_set_extension" "extensao_script" {
+  name                         = "extensao-script"
+  virtual_machine_scale_set_id = azurerm_virtual_machine_scale_set.meu_conjunto_de_maquinas_wordpress.id
+  publisher                    = "Microsoft.Azure.Extensions"
+  type                         = "CustomScript"
+  type_handler_version         = "2.0"
+  settings = jsonencode({
+    "commandToExecute" = "sudo apt-get update && sudo apt-get --yes --force-yes install docker.io && sudo docker run -p 80:80 --name meu-wordpress -e WORDPRESS_DB_HOST=10.0.2.4:3306 -e WORDPRESS_DB_USER=usr-wordpress -e WORDPRESS_DB_PASSWORD=jhjggykjhd85d83h -e WORDPRESS_DB_NAME=wordpress -d wordpress"
+  })
+}*/
 
 resource "azurerm_monitor_autoscale_setting" "monitor" {
   name                = "minha-conf-autoscaling"
@@ -220,7 +230,7 @@ resource "azurerm_network_security_group" "grupo_de_seguranca_wordpress" {
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
 
 # Criei esse acesso para poder visualizar a máquina do banco e poder utilizá-la para visualizar as demais máquinas
-  security_rule {
+  /*security_rule {
     name                       = "MySQL"
     priority                   = 100
     direction                  = "Inbound"
@@ -230,7 +240,7 @@ resource "azurerm_network_security_group" "grupo_de_seguranca_wordpress" {
     destination_port_range     = "3306"
     source_address_prefix      = "*"
     destination_address_prefix = "*"
-  }
+  }*/
 
     security_rule {
     name                       = "SSH"
@@ -262,7 +272,7 @@ resource "azurerm_network_interface" "interface_rede_mysql" {
     subnet_id                     = azurerm_subnet.subnet_interna.id
     public_ip_address_id          = azurerm_public_ip.mysql_PIP.id
     private_ip_address_allocation = "Static"
-    private_ip_address            = cidrhost("10.0.2.4/24", 4)
+    private_ip_address            = cidrhost("10.0.2.4/24", 4) #10.0.2.4
   }
 }
 
@@ -336,7 +346,7 @@ resource "null_resource" "para_uso" {
         type = "ssh"
         private_key = file("~/.ssh/id_rsa.insecure")
         timeout = "1m"
-        agent = true
+        agent = false
     }
   }
 }
