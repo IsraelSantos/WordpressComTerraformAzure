@@ -148,17 +148,6 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
   }
 }
 
-/*resource "azurerm_virtual_machine_scale_set_extension" "extensao_script" {
-  name                         = "extensao-script"
-  virtual_machine_scale_set_id = azurerm_virtual_machine_scale_set.meu_conjunto_de_maquinas_wordpress.id
-  publisher                    = "Microsoft.Azure.Extensions"
-  type                         = "CustomScript"
-  type_handler_version         = "2.0"
-  settings = jsonencode({
-    "commandToExecute" = "sudo apt-get update && sudo apt-get --yes --force-yes install docker.io && sudo docker run -p 80:80 --name meu-wordpress -e WORDPRESS_DB_HOST=10.0.2.4:3306 -e WORDPRESS_DB_USER=usr-wordpress -e WORDPRESS_DB_PASSWORD=jhjggykjhd85d83h -e WORDPRESS_DB_NAME=wordpress -d wordpress"
-  })
-}*/
-
 resource "azurerm_monitor_autoscale_setting" "monitor" {
   name                = "minha-conf-autoscaling"
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
