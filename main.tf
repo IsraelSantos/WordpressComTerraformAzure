@@ -68,6 +68,8 @@ resource "azurerm_lb_probe" "meu_http_probe" {
   loadbalancer_id     = azurerm_lb.wordpress_loadbalance.id
   name                = "meu_http_probe"
   port                = 80
+  protocol            = "Http"
+  request_path        = "/wp-admin/images/wordpress-logo.svg"
 }
 
 resource "azurerm_lb_rule" "lbnatrule" {
@@ -86,6 +88,7 @@ resource "azurerm_virtual_machine_scale_set" "meu_conjunto_de_maquinas_wordpress
   name                = "meu-conjunto-de-maquinas-wordpress"
   resource_group_name = azurerm_resource_group.meu_grupo_de_recursos.name
   location            = azurerm_resource_group.meu_grupo_de_recursos.location
+
   
   upgrade_policy_mode  = "Manual"
 
@@ -158,9 +161,9 @@ resource "azurerm_monitor_autoscale_setting" "monitor" {
     name = "defaultProfile"
 
     capacity {
-      default = 1
-      minimum = 1
-      maximum = 2
+      default = 2
+      minimum = 2
+      maximum = 3
     }
 
     rule {
